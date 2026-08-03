@@ -13,3 +13,13 @@ Le operazioni principali sono state:
 - Modifica dei path, cartelle e sistema di build.
 
 ![00](../00.png)
+
+## Tappa 01: Nuovi controlli per il movimento della telecamera
+
+In questa tappa ho cambiato il paradigma con cui si controlla la telecamera, dal movimento del mouse si e' passato ad un controllo a sei gradi di liberta' da tastiera:
+
+- WASD per Pitch e Yaw (pan_tilt)
+- EQ per il Roll
+- LShift e LControl per avanzare o indietreggiare
+  I movimenti, che per ora si basano ancora sugli angoli di eulero, risultano indipendenti fra loro e dall'ambiente circostante.
+  E' facile notare alcune limitazioni di questa scelta, ad esempio il Gimbal Lock previene la possibilita' di eseguire una rotazione pitch di 360'.

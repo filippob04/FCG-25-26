@@ -15,9 +15,6 @@
 #include "../resources/include/mesh.hh"
 #include "../resources/include/hotshaders.hh"
 #include "../resources/include/trackball.hh"
-#include "../resources/include/rawmouse.hh"
-
-
 
 /////////////////////////////
 // Window and OpenGL setup //
@@ -43,7 +40,7 @@ public:
 
         window = new sf::Window (
                                  sf::VideoMode({window_width, window_height}),
-                                 "S6393212 - 00.cpp",
+                                 "S6393212 - 01.cpp",
                                  sf::Style::Default,
                                  sf::State::Windowed,
                                  settings
@@ -162,15 +159,20 @@ private:
     // xyz, starting point of dynamic camera position
     glm::vec3 camera_pos = {0.0, 0.0, 2}; // xyz
     GLint camera_pos_loc; // xyz
+
     // Angles defining the in-place camera rotation
-    float phi_deg = 0.0;
-    float theta_deg = 0.0;
+    float yaw_deg = 0.0; // phi
+    float pitch_deg = 0.0; // theta
+    float roll_deg = 0.0;
 
     /** Camera movement **/
-    const float dolly_speed = 1.0;
-    bool dolly_on = false;
-    bool forward = false;
-    bool pan_tilt_on = false;
+    float move_speed = 1.0;
+    float rot_speed = 45.0;
+
+    float move_dir = 0.0;
+    float yaw_dir = 0.0;
+    float pitch_dir = 0.0;
+    float roll_dir = 0.0;
 
 public:
     Camera (fcg::Shaders& shaders)
@@ -191,54 +193,57 @@ public:
         view_projection ();
     }
 
-    bool pan_tilt_toggle ()
-    {
-        return pan_tilt_on = !pan_tilt_on;
-    }
+    // camera movement
+    void move (float delta_time)
+    {   
+        // Pitch and Yaw
+        yaw_deg += (yaw_dir * rot_speed * delta_time);
 
-    void pan_tilt (float dx, float dy)
-    {
-        if (!pan_tilt_on)
-            return;
+        pitch_deg += (pitch_dir * rot_speed * delta_time);
+        pitch_deg = pitch_deg > 90.0? 90.0 : pitch_deg;
+        pitch_deg = pitch_deg < -90.0? -90.0 : pitch_deg;
 
-        phi_deg += dx * 0.1;
-        theta_deg += dy * 0.1;
-        theta_deg = theta_deg > 90.0? 90.0 : theta_deg;
-        theta_deg = theta_deg < -90.0? -90.0 : theta_deg;
-        view_projection ();
-    }
+        // Roll
+        roll_deg += (roll_dir * rot_speed * delta_time);
 
-    void dolly_start (bool fw)
-    {
-        forward = fw;
-        dolly_on = true;
-    }
+        // Complete movement
+        float yaw_rad = glm::radians (yaw_deg);
+        float pitch_rad = glm::radians (pitch_deg);
 
-    void dolly_stop ()
-    {
-        dolly_on = false;
-    }
+        float ps = glm::sin (yaw_rad);
+        float pc = glm::cos (yaw_rad);
+        
+        float ts = glm::sin (pitch_rad);
+        float tc = glm::cos (pitch_rad);
+        
+        // this vector contains where the camera is pointing
+        glm::vec3 front_vector(
+            tc * -ps,
+            ts,
+            tc * pc
+        );
 
-    void dolly (float delta)
-    {
-        if (!dolly_on)
-            return;
-
-        float ds = forward? -dolly_speed : dolly_speed;
-        float r = delta * ds;
-
-        // 3D movement
-        float phi_rad = glm::radians (phi_deg);
-        float ps = glm::sin (phi_rad);
-        float pc = glm::cos (phi_rad);
-        float theta_rad = glm::radians (theta_deg);
-        float ts = glm::sin (theta_rad);
-        float tc = glm::cos (theta_rad);
-        camera_pos.x += r * tc * -ps;
-        camera_pos.z += r * tc * pc;
-        camera_pos.y += r * ts;
+        float delta_s = -move_dir * move_speed * delta_time;
+        // newPos = oldPos + front_vector * delta_s 
+        camera_pos += front_vector * delta_s;
 
         view_projection ();
+    }
+
+    void set_move_dir (float dir) {
+        move_dir = dir;
+    }
+
+    void set_yaw_dir (float dir) {
+        yaw_dir = dir;
+    }
+
+    void set_pitch_dir (float dir) {
+        pitch_dir = dir;
+    }
+
+    void set_roll_dir (float dir) {
+        roll_dir = dir;
     }
 
     void view_projection ()
@@ -251,8 +256,9 @@ public:
         float fcp = od + 4.0; // distance far clip plane
 
         // prepare rotations and translation matrices
-        glm::mat4 ry = fcg::rotation_y (phi_deg);
-        glm::mat4 rx = fcg::rotation_x (theta_deg);
+        glm::mat4 rz = fcg::rotation_z (roll_deg); // new roll matrix
+        glm::mat4 ry = fcg::rotation_y (yaw_deg);
+        glm::mat4 rx = fcg::rotation_x (pitch_deg);
         glm::mat4 t = fcg::translation (-cp.x, -cp.y, -cp.z);
 
         // prepare projection matrix
@@ -267,7 +273,7 @@ public:
                                  );
 
         // Compute VP matrix and update it
-        v = rx * ry * t;
+        v = rz * rx * ry * t;
         vp = pr * v;
         inv_v = glm::inverse (v);
 
@@ -503,9 +509,6 @@ private:
     }
 };
 
-
-
-
 ////////////////////
 // SFML Callbacks //
 ////////////////////
@@ -521,9 +524,30 @@ void handle (const sf::Event::KeyPressed& key, fcg::Shaders& shaders, Scene& sce
     switch (key.scancode) {
     case sf::Keyboard::Scancode::Escape:
         exit (0);
-    case sf::Keyboard::Scancode::Space:
-        scene.camera.dolly_start (!sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt));
-        return;
+    case sf::Keyboard::Scancode::LShift:
+        scene.camera.set_move_dir(1.0);
+        break;
+    case sf::Keyboard::Scancode::LControl:
+        scene.camera.set_move_dir(-1.0);
+        break;
+    case sf::Keyboard::Scancode::W:
+        scene.camera.set_pitch_dir(-1.0);
+        break;
+    case sf::Keyboard::Scancode::A:
+        scene.camera.set_yaw_dir(-1.0);
+        break;
+    case sf::Keyboard::Scancode::S:
+        scene.camera.set_pitch_dir(1.0);
+        break;
+    case sf::Keyboard::Scancode::D:
+        scene.camera.set_yaw_dir(1.0);
+        break;
+    case sf::Keyboard::Scancode::E:
+        scene.camera.set_roll_dir(1.0);
+        break;
+    case sf::Keyboard::Scancode::Q:
+        scene.camera.set_roll_dir(-1.0);
+        break;
     default:
         return;
     }
@@ -532,25 +556,32 @@ void handle (const sf::Event::KeyPressed& key, fcg::Shaders& shaders, Scene& sce
 void handle (const sf::Event::KeyReleased& key, fcg::Shaders& shaders, Scene& scene)
 {
     switch (key.scancode) {
-    case sf::Keyboard::Scancode::Space:
-        scene.camera.dolly_stop ();
-        return;
+    case sf::Keyboard::Scancode::LShift:
+        scene.camera.set_move_dir(0.0);
+        break;
+    case sf::Keyboard::Scancode::LControl:
+        scene.camera.set_move_dir(0.0);
+        break;
+    case sf::Keyboard::Scancode::W:
+        scene.camera.set_pitch_dir(0.0);
+        break;
+    case sf::Keyboard::Scancode::A:
+        scene.camera.set_yaw_dir(0.0);
+        break;
+    case sf::Keyboard::Scancode::S:
+        scene.camera.set_pitch_dir(0.0);
+        break;
+    case sf::Keyboard::Scancode::D:
+        scene.camera.set_yaw_dir(0.0);
+        break;
+    case sf::Keyboard::Scancode::E:
+        scene.camera.set_roll_dir(0.0);
+        break;
+    case sf::Keyboard::Scancode::Q:
+        scene.camera.set_roll_dir(0.0);
+        break;
     default:
         return;
-    }
-}
-
-void handle (sf::Vector2f delta, Camera& camera)
-{
-    camera.pan_tilt (delta.x, delta.y);
-}
-
-void handle (const sf::Event::MouseButtonPressed& mouse_pressed, Camera& camera, sf::Window& window)
-{
-    if (mouse_pressed.button == sf::Mouse::Button::Left) {
-        bool pan_tilt_on = camera.pan_tilt_toggle ();
-        window.setMouseCursorGrabbed (pan_tilt_on);
-        window.setMouseCursorVisible (!pan_tilt_on);
     }
 }
 
@@ -591,7 +622,7 @@ int main (int argc, char* argv[])
 
     sf::Clock clock;
     bool running = true;
-    fcg::RawMouse raw_mouse;
+
     while (running)
     {
         while (const std::optional event = window.pollEvent ())
@@ -604,15 +635,11 @@ int main (int argc, char* argv[])
                 handle (*key_pressed, shaders, scene);
             else if (const auto* key_released = event->getIf<sf::Event::KeyReleased> ())
                 handle (*key_released, shaders, scene);
-            else if (const auto* mouse_pressed = event->getIf<sf::Event::MouseButtonPressed> ())
-                handle (*mouse_pressed, scene.camera, window);
-            else if (const auto* mouse_moved_raw = event->getIf<sf::Event::MouseMovedRaw> ())
-                raw_mouse.event (*mouse_moved_raw);
         }
-        handle (raw_mouse.delta (), scene.camera);
 
         float elapsed = clock.restart().asSeconds();
-        scene.camera.dolly (elapsed);
+
+        scene.camera.move (elapsed);
         scene.lights.send_position_relative (scene.camera.inv_v);
 
         scene.draw ();
