@@ -1,3 +1,15 @@
 .DS_Store
 build
 .vscode
+
+resources/texture/*
+
+!resources/texture/ground/
+resources/texture/ground/*
+!resources/texture/ground/ground-grass-road-floor/
+resources/texture/ground/ground-grass-road-floor/*
+!resources/texture/ground/ground-grass-road-floor/grass_patchy2.png
+
+!resources/texture/skybox/
+resources/texture/skybox/*
+!resources/texture/skybox/Clear/
