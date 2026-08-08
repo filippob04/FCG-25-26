@@ -59,3 +59,8 @@ SET( fn02 "02_game" )
 add_executable( ${fn02} src/02/${fn02}.cpp )
 target_link_libraries( ${fn02} PRIVATE common SFML::System SFML::Window SFML::Graphics OpenGL::GL glm::glm-header-only ${CORE_GRAPHICS_LIB})
 target_include_directories( ${fn02} PRIVATE ${CMAKE_SOURCE_DIR}/resources/include )
+
+SET( fn03 "03_game" )
+add_executable( ${fn03} src/03/${fn03}.cpp )
+target_link_libraries( ${fn03} PRIVATE common SFML::System SFML::Window SFML::Graphics OpenGL::GL glm::glm-header-only ${CORE_GRAPHICS_LIB})
+target_include_directories( ${fn03} PRIVATE ${CMAKE_SOURCE_DIR}/resources/include )

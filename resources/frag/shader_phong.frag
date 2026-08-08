@@ -17,12 +17,8 @@ struct Material {
 };
 uniform Material material;
 
-uniform sampler2D baseTexture;
-uniform float tilingFactor;
-
 in vec3 interpolated_pos;
 in vec3 interpolated_normal;
-in vec2 texcoord;
 
 out vec4 fragment_color;
 
@@ -33,16 +29,13 @@ void main()
     vec3 pos = interpolated_pos;
     vec3 normal = normalize(interpolated_normal);
 
-    vec2 tiled_uv = texcoord * tilingFactor;
-    vec4 texColor = texture(baseTexture, tiled_uv); // texture color (RGBA)
-
     // Ambient
-    vec3 ambient = texColor.rgb * light.ambient_val;
+    vec3 ambient = material.ambient * light.ambient_val;
 
     // Diffuse
     vec3 light_dir = normalize (light.direct_pos - pos);
     float diff = max (dot (normal, light_dir), 0.0);
-    vec3 diffuse = texColor.rgb * diff * light.direct_val;
+    vec3 diffuse = material.diffuse * diff * light.direct_val;
 
     // Specular
     vec3 view_dir = normalize (camera_pos - pos);

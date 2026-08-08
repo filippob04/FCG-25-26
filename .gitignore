@@ -6,10 +6,25 @@ resources/texture/*
 
 !resources/texture/ground/
 resources/texture/ground/*
-!resources/texture/ground/ground-grass-road-floor/
-resources/texture/ground/ground-grass-road-floor/*
-!resources/texture/ground/ground-grass-road-floor/grass_patchy2.png
+!resources/texture/ground/BlendMap
+!resources/texture/ground/terrain/
+resources/texture/ground/terrain/*
+!resources/texture/ground/terrain/grass_patchy2.png
+!resources/texture/ground/terrain/city_roofs.png
+!resources/texture/ground/terrain/city_grass.png
+!resources/texture/ground/terrain/dark_water.jpg
 
 !resources/texture/skybox/
 resources/texture/skybox/*
 !resources/texture/skybox/Clear/
+
+resources/texture/building/*
+!resources/texture/building/
+!resources/texture/building/BlueishWindowsBlackSpaces_S.jpg
+!resources/texture/building/DarkGreyWindowsPaleBlocks_S.jpg
+!resources/texture/building/GreyRectangles_S.jpg
+!resources/texture/building/VerticleBrownBricks_S.jpg
+!resources/texture/building/GreyWindowsWithBlinds_S.jpg
+!resources/texture/building/VerticalStrips_S.jpg
+!resources/texture/building/OfficeWindows_S.jpg
+!resources/texture/building/XSupport_S.jpg

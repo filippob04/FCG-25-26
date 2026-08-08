@@ -529,7 +529,7 @@ public:
         main_shaders(main_sh),
         skybox_shaders(skybox_sh)
     {
-        ground = new Texture2D(dirname + "texture/ground/ground-grass-road-floor/grass_patchy2.png");
+        ground = new Texture2D(dirname + "texture/ground/terrain/grass_patchy2.png");
         locations (main_shaders);
         update_all ();
     }
@@ -741,7 +741,7 @@ int main (int argc, char* argv[])
     Setup setup;
     sf::Window& window = *setup.window;
 
-    fcg::Shaders main_shaders ("./resources/vert/shader_phong.vert", "./resources/frag/shader_phong.frag");
+    fcg::Shaders main_shaders ("./resources/vert/shader_mono.vert", "./resources/frag/shader_mono.frag");
     fcg::Shaders skybox_shaders ("./resources/vert/skybox.vert", "./resources/frag/skybox.frag");
 
     main_shaders.use ();
