@@ -79,3 +79,26 @@ Non soddisfatto dalla soluzione trovata ho separato lo shader in due, uno sempre
 Infine ho modificato, in una serie di tentativi, i valori della luce fino a che non ho trovato una soluzione di mio garbo.
 
 ![03](../03.png)
+
+## Tappa 04: Fisica di base
+
+In questa tappa l'obbiettivo era quello di aggiungere una serie di comportamenti e feedback per simulare il volo di un aereo e non di una astronave nel vuoto.
+
+Innanzitutto ho dovuto scegliere quale livello di simulazione implementare. Inizialmente mi ero affidato ad un tutorial online che, tramite un modello dinamico (basato su forze, superfici e dati realistici), andava a simulare in modo piuttosto fedele il comportamento di un aereo nella nostra atmosfera. Tuttavia questo approccio risultava eccessivamente complesso e fuori dalla mia portata, specialmente in quanto dati e metodi implementati facevano affidamento su un ambiente di gioco molto piu' sviluppato. In futuro si potrebbe pensare di rivalutarlo.
+
+Dunque ho optato per un approccio piu' arcade-like, nel quale viene implementata una manetta virtuale a cinque stadi, tramite la quale l'aereo accelera o decelera. Questo effetto si ottiene in `physics.hh` grazie alla variabile `speed-difference` che va a calcolare un valore positivo (o negativo) che poi si applica tramite l'equazione cinematica del moto rettilineo per calcolare la velocita' del velivolo nello spazio.
+
+Il modello da me implementato simula la gravita'tramite un sistema basato sulla somma di tre vettori associati all'aereo:
+
+- Vettore direzione, dato dall'orientamento spaziale della telecamera.
+- Vettore della forza normale, ortogonale direzionato verso l'alto rispetto all'aereo, associato ad un valore di lift ossia, quanto l'aereo e' in grado di combattere la foza di gravita' in base alla sua velocita' corrente.
+- Vettore della forza peso, in questo caso corrispondente solo alla forza di gravita' in quanto il peso e' unitario, direzionato verso il suolo.
+
+da notare come, mentre il vettore normale ruota con l'aereo, il vettore della forza peso rimane fisso, correttamente, a puntare verso il suolo.
+
+Questo permete una simulazione abbastanza banale di un corpo nello spazio che si muove ed e' soggetto ad una forza costante che lo attrae al suolo ed una resistenza imposta da lui che varia dinamicamente man mano che acquisisce velocita'.
+
+Inoltre e' stato definito un metodo `void attach_to (const glm::vec3& target_pos, const glm::quat& target_dir)` all'interno della classe `Camera` che permette l'associazione fra camera (angoli di eulero) e target (quaternione).
+Infine ho definito un metodo `bool check_collision()` che restituisce `true` se si superano dei limiti (suolo, cielo), per ora si possono attraversare i palazzi.
+
+[Link: Modello piu' complesso.](https://www.jakobmaier.at/posts/flight-simulation/)
