@@ -102,3 +102,18 @@ Inoltre e' stato definito un metodo `void attach_to (const glm::vec3& target_pos
 Infine ho definito un metodo `bool check_collision()` che restituisce `true` se si superano dei limiti (suolo, cielo), per ora si possono attraversare i palazzi.
 
 [Link: Modello piu' complesso.](https://www.jakobmaier.at/posts/flight-simulation/)
+
+## Tappa 05: Controlli avanzati
+
+Rispetto alla versione precedente del gioco e' immediato notare alcuni cambiamenti nella sensibilita' e nell'effetto dei controlli del velivolo.
+
+Sono stati definiti nuovi comportamenti per rendere piu' uniformi i movimenti controllati da tastiera, con un ragionamento simile a quello applicato per l'accelerazione. Ora i controlli hanno un target desiderato e un valore che con lo scorrere del tempo lo raggiunge. Oltre a rendere questi movimenti piu' fluidi, ho aggiunto anche un fattore di allineamento delle rotazioni. Per `pitch` e `roll` questo si ottiene calcolando la differenza fra la rotazione corrente e un valore calcolato dal prodotto fra una costante e il valore y del vettore associato al rilascio del pulsante. Cosi' facendo il valore della rotazione del velivolo andra' man mano a diminuire e nel mentre subira' anche un movimento opposto che dara' l'effetto di auto-align. Ricordando alcuni simulatori che ho provato in passato, il comando di `yaw`, ottenuto premendo i pedali del velivolo, ha un rientro molto piu' brusco, talvolta oscillante. La mia implementazione cerca di avvicinarsi a tale comportamento, facendo si che piu' a lungo il comando viene tenuto premuto meno forte sara' la spinta ritornata da una sorta di molla virtuale che si scarica quando il comando viene lasciato.
+
+In questa tappa ho anche completato la funzione `check_collision()`, che adesso calcola per ogni palazzo la dimensione della base e l'altezza, e le confronta con la posizione dell'aereo. Questo controllo viene effettuato ad ogni frame per ogni palazzo. Risulterebbe molto poco efficiente se,
+
+- I palazzi diventassero centinaia,
+- I palazzi fossero molto distanti fra loro.
+
+probabilmente esistono metodi piu' intelligenti per farlo, ad esempio controllare i palazzi a settori, solo se l'aereo e' sotto una certa altitudine, ma come soluzione penso sia attualmente adatta al mio progetto.
+
+![05 GIF](../05.gif)
