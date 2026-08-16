@@ -1,11 +1,11 @@
 #version 410 core 
 
-in vec3 TexCoord0;
+in vec3 texcoord;
 
 out vec4 FragColor;
 
 uniform samplerCube gCubemapTexture;
 
 void main() {
-    FragColor = texture(gCubemapTexture, TexCoord0);
+    FragColor = texture(gCubemapTexture, texcoord);
 }

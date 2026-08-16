@@ -741,7 +741,7 @@ int main (int argc, char* argv[])
     Setup setup;
     sf::Window& window = *setup.window;
 
-    fcg::Shaders main_shaders ("./resources/vert/shader_mono.vert", "./resources/frag/shader_mono.frag");
+    fcg::Shaders main_shaders ("./resources/vert/main_shader.vert", "./resources/frag/shader_mono.frag");
     fcg::Shaders skybox_shaders ("./resources/vert/skybox.vert", "./resources/frag/skybox.frag");
 
     main_shaders.use ();

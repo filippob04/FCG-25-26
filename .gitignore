@@ -28,3 +28,6 @@ resources/texture/building/*
 !resources/texture/building/VerticalStrips_S.jpg
 !resources/texture/building/OfficeWindows_S.jpg
 !resources/texture/building/XSupport_S.jpg
+
+resources/texture/aircraft*
+!resources/texture/aircraft

@@ -40,7 +40,7 @@ public:
 
         window = new sf::Window (
                                  sf::VideoMode({window_width, window_height}),
-                                 "S6393212 - 03.cpp",
+                                 "S6393212 - 04.cpp",
                                  sf::Style::Default,
                                  sf::State::Windowed,
                                  settings

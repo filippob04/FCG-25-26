@@ -98,8 +98,8 @@ da notare come, mentre il vettore normale ruota con l'aereo, il vettore della fo
 
 Questo permete una simulazione abbastanza banale di un corpo nello spazio che si muove ed e' soggetto ad una forza costante che lo attrae al suolo ed una resistenza imposta da lui che varia dinamicamente man mano che acquisisce velocita'.
 
-Inoltre e' stato definito un metodo `void attach_to (const glm::vec3& target_pos, const glm::quat& target_dir)` all'interno della classe `Camera` che permette l'associazione fra camera (angoli di eulero) e target (quaternione).
-Infine ho definito un metodo `bool check_collision()` che restituisce `true` se si superano dei limiti (suolo, cielo), per ora si possono attraversare i palazzi.
+Inoltre e' stato definito un metodo `attach_to` all'interno della classe `Camera` che permette l'associazione fra camera (angoli di eulero) e target (quaternione).
+Infine ho definito un metodo `check_collision()` che restituisce `true` se si superano dei limiti (suolo, cielo), per ora si possono attraversare i palazzi.
 
 [Link: Modello piu' complesso.](https://www.jakobmaier.at/posts/flight-simulation/)
 
@@ -117,3 +117,73 @@ In questa tappa ho anche completato la funzione `check_collision()`, che adesso 
 probabilmente esistono metodi piu' intelligenti per farlo, ad esempio controllare i palazzi a settori, solo se l'aereo e' sotto una certa altitudine, ma come soluzione penso sia attualmente adatta al mio progetto.
 
 ![05 GIF](../05.gif)
+
+## Tappa 06: HUD
+
+Concluso lo sviluppo della fisica di gioco, a questo punto mi sono dedicato alla creazione di un HUD.
+Inizialmente l'idea era quella di proiettare sulla telecamera delle immagini bidimensionali, quindi sfruttando `SFML` avevo creato una classe che aveva il semplice compito di mostrare a schermo la velocita' del velivolo:
+
+```cpp
+class Hud {
+    private:
+        sf::Font font;
+        sf::Text hud_text;
+    public:
+        Hud (const std::string& path) : hud_text(font) {
+            if (!font.openFromFile(path)) {
+                std::cerr << "Failure: error during SFML Font Loading." << std::endl;
+            }
+            // text properties
+            hud_text.setFont(font);
+            hud_text.setCharacterSize(24);
+            hud_text.setFillColor(sf::Color::White);
+            // hud positioning
+            sf::Vector2f t_pos = sf::Vector2f(0.0f, 0.0f);
+            hud_text.setPosition(t_pos);
+        }
+        void update (fcg::Airplane airplane) {
+            float speed = static_cast<int>(airplane.get_speed()); // to int to avoid decimal
+            hud_text.setString(std::to_string(speed) + "km/h\n");
+        }
+        void draw(sf::RenderWindow& window) {
+            window.resetGLStates(); // pauses and resumes OpenGL rendering
+            window.draw(hud_text);
+        }
+};
+```
+
+Tuttavia, prima cercando su forum online, poi chiedendo direttamente ad un LLM (Gemini, Claude), questo approccio non e' implementabile. Dalla mia comprensione, sembra che la versione di `OpenGL` supportata da `MacOS` risulta incompatibile con alcune funzioni di libreria `SFML` e dunque far collaborare le due per un rendering misto 2D/3D risulta impossibile.
+
+A questo punto ho avuto l'idea di usare un approccio diverso, definire direttamente in `OpenGL` dei sottilissimi quadrati, texturizzati in modo opportuno, a distanza minima dalla camera, cosi' da ottenere una sorta di HUD.
+
+Partendo da questa idea, e costruendo una serie di strumenti, adotto lo stesso approccio dei `building`:
+
+```cpp
+// hud elements
+struct hud_element {
+    glm::vec3 size;
+    glm::vec3 pos;
+    Texture2D* texture;
+};
+std::vector<hud_element> hud;
+std::vector<Texture2D*> hud_t;
+```
+
+Definendo poi un semplicissimo shader di supporto, nel metodo `init_hud`, inizializzo le posizioni e le texture dei singoli strumenti.
+
+Quindi il mio HUD risulta essere una serie di `cube.off` scalati, ruotati, traslati, impilati l'uno sopra l'altro.
+
+Per ottenere queste immagini, sono partito dall'HUD del gioco di riferimento, `Microsoft Flight Simulator 2000`, e sempre con `GIMP` ho isolato e adattato alcuni strumenti da animare. In totale sono quattro:
+
+- Indicatore dello `yaw`
+- Orizzonte Virtuale
+- Indicatore della `speed`
+- Cloche
+
+Ognuno di questi ha i relativi comportamenti descritti nel metodo `draw_hud ()`. Il piu' difficile da sviluppare e' stato l'orizzonte virtuale. Realisticamente sarebbe dovuta essere una sfera texturizzata, in grado di indicare la posizione assoluta del suolo rispetto al velivolo, mentre nel mio caso e' solo una `.png` che ruota in base all'asse di `roll`. Quest'ultimo e' ottenuto con un ragionamento simile a quello del metodo `attach_to` della camera, infatti preleva dal quaternione `orientation` i dati necessari per calcolare di quanto l'aereo risulta inclinato.
+
+NB, la funzione di libreria `glm::roll(quat q)` non riusciva a interpretare correttamente situazioni di `Gimbal_lock`.
+
+Mi rendo conto che questa soluzione non e' ottimale, disegnare l'hud nello stesso contesto tridimensionale del paesaggio non penso sia una scelta architetturalmente corretta. Infatti in alcune situazioni, ad esempio quando il velivolo si avvicina pericolosamente ad un palazzo, quest'ultimo risultera sovrapposto all'HUD generando conflitti visivi. Tuttavia nella maggior parte dei casi, l'HUD e' stabile.
+
+![06 GIF](../06.gif)

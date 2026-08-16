@@ -101,6 +101,25 @@ namespace fcg
                 glm::vec3 final_velocity = move_dir + gravity_dir + lift_vec;
                 position += final_velocity * dt; // its moving!
             }
+
+            // getter for hud
+            float get_speed () {return current_velocity;}
+            float get_pitch () {return current_pitch;}
+            float get_yaw () {return current_yaw;}
+            float get_roll () {return current_roll;}
+            float get_horizon () { // glm::roll(orientation) doesnt prevent gimbal lock
+                glm::mat4 rot_matrix = glm::mat3_cast(orientation); // mat3 orientation, mat4 = mat3 + position
+
+                // directional vectors
+                glm::vec3 right_dir = rot_matrix[0];
+                glm::vec3 up_dir = rot_matrix[1];
+
+                // .y in [-1, 1]. inclination to the sky
+                float lateral_inc = right_dir.y;
+                float vertical_inc = up_dir.y;
+
+                return std::atan2f(lateral_inc, vertical_inc); // gets roll angle
+            }
     };
 }
 
