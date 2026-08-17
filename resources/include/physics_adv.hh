@@ -18,7 +18,7 @@ namespace fcg
             const float WEIGHT_FEEL = 5.0f;
 
             unsigned int throttle_level = 3; // [0, 5]
-            float current_velocity = (throttle_level / 5.0f) * MAX_SPEED;
+            float current_velocity = (throttle_level / WEIGHT_FEEL) * MAX_SPEED;
             float angular_velocity = glm::radians(25.0f); // rot_speed
             float yaw_velocity = glm::radians(5.0f); // yaw_speed, slower!
 
@@ -38,17 +38,24 @@ namespace fcg
             void set_pitch_dir (float dir) {target_pitch = dir;}
             void set_roll_dir (float dir) {target_roll = dir;}
 
-            void throttle_up () {if (throttle_level < 5) {throttle_level++;}}
-            void throttle_down () {if (throttle_level > 0) {throttle_level--;}}
+            void throttle_up () {if (throttle_level < 5) {throttle_level++;}}  
+            void throttle_down () {if (throttle_level > 0) {throttle_level--;}}   
 
             void update (float dt) {
+
+                glm::vec3 fw_dir = orientation * glm::vec3(0.0f, 0.0f, -1.0f);
+
+                float engine_power = (throttle_level / WEIGHT_FEEL) * MAX_SPEED; // old target velocity
+                float inc_effect = -fw_dir.y * 10.0f; //.y [-1. 1], 1 = straight up, -1 = straight down
+                
+                float target_velocity = engine_power + inc_effect;
+                target_velocity = glm::max(0.0f, target_velocity);
 
                 // auto-align
                 float auto_pitch = 0.0f;
                 float auto_roll = 0.0f;
                 float auto_yaw = 0.0f;
 
-                float target_velocity = (throttle_level / 5.0f) * MAX_SPEED; // fixed max speed for each specific throttle_level
                 float speed_difference = target_velocity - current_velocity; // dynamic engine/brake
                 
                 float acceleration_rate = speed_difference * 0.25f; // start to accelerate (decelerate) to reach target speed
@@ -59,7 +66,6 @@ namespace fcg
                 current_yaw += (target_yaw - current_yaw) * WEIGHT_FEEL * dt;
                 current_roll += (target_roll - current_roll) * WEIGHT_FEEL * dt;
 
-                glm::vec3 fw_dir = orientation * glm::vec3(0.0f, 0.0f, -1.0f);
                 glm::vec3 right_dir = orientation * glm::vec3(1.0f, 0.0f, 0.0f);
 
                 // if i'm not holding the stick (WS + EQ) 
@@ -120,6 +126,7 @@ namespace fcg
 
                 return std::atan2f(lateral_inc, vertical_inc); // gets roll angle
             }
+            unsigned int get_throttle_level () {return throttle_level;}
     };
 }
 

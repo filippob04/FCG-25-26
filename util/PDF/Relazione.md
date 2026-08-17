@@ -187,3 +187,35 @@ NB, la funzione di libreria `glm::roll(quat q)` non riusciva a interpretare corr
 Mi rendo conto che questa soluzione non e' ottimale, disegnare l'hud nello stesso contesto tridimensionale del paesaggio non penso sia una scelta architetturalmente corretta. Infatti in alcune situazioni, ad esempio quando il velivolo si avvicina pericolosamente ad un palazzo, quest'ultimo risultera sovrapposto all'HUD generando conflitti visivi. Tuttavia nella maggior parte dei casi, l'HUD e' stabile.
 
 ![06 GIF](../06.gif)
+
+## Tappa 07: Suoni
+
+Utilizzando la componente `sf::Sound` di `SFML`, procedo ad implementare diversi rumori e feedback sonori nel mio gioco. Seguendo la wiki ufficiale della libreria, creo una classe `Audio` e la popolo con costruttore, metodi pubblici e diversi `sf::SoundBuffer`, uno per ogni suono. Probabilmente avrei potuto risparmiarne uno, sostituendo un certo suono con quello dello schianto.
+A termine dello sviluppo avro':
+
+- Rumore dinamico del motore
+- Rumore di click della manetta
+- Rumore di schianto
+- Rumore Ambientale
+
+Dunque, mentre i primi tre sono semplici `.wav` caricati in RAM, l'ultimo e' una traccia che, tramite `sf::Music`, viene letta e mandata in loop direttamente dal file audio.
+
+Come per accelerazione e rotazioni varie, gestisco l'aumento e diminuzione del pitch del suono con una certa crescita legata ad un `float dt`, in questo caso preso dal clock globale del programma.
+
+L'aumento di velocita' del velivolo e' simulato grazie ad un semplice aumento del pitch, che fa si che quando aumenta la velocita' il suono sia piu' acuto, viceversa se diminuisce, sara' piu' grave. Ho modificato le `handle` della manetta, ora riproducono un suono per ciascuno step, ed una per indicare il raggiungimento del livello massimo (minimo).
+
+Forse la parte piu' complessa e' stata legare la variazione del pitch, oltre che alla manipolazione della manetta, anche all'inclinazione dell'asse di pitch dell'aereo. Avrei potuto sviluppare questo comportamento legandolo unicamente all'audio, pero' ho pensato fosse piu' corretto andare direttamente ad aggiungere prima questo in `physics_adv.hh` cosi' ottenendo una soluzione piu' pulita.
+
+```cpp
+    glm::vec3 fw_dir = orientation * glm::vec3(0.0f, 0.0f, -1.0f);
+
+    float engine_power = (throttle_level / WEIGHT_FEEL) * MAX_SPEED; // old target velocity
+    float inc_effect = -fw_dir.y * 10.0f; //.y [-1. 1], 1 = straight up, -1 = straight down
+
+    float target_velocity = engine_power + inc_effect;
+    target_velocity = glm::max(0.0f, target_velocity);
+```
+
+Come per l'orizzonte virtuale, calcolo il valore di inclinazione rispetto al terreno grazie al valore y del vettore frontale (direzione dell'aereo) e lo utilizzo per creare uno scalare da aggiungere o sottrarre alla velocita' obbiettivo. Il resto della fisica rimane invariata.
+
+Infine aggiungo nel ciclo principale un controllo migliorato per `check_collision()` che ora riprodurra' un suono e visualizzera' lo schermo nero. `sf::sleep(sf::seconds(float s))` e' necessario per dare il tempo al programma di riprodurre il suono.
