@@ -518,7 +518,7 @@ public:
         // buildings
         building_shaders.use();
 
-        building_loc = glGetUniformLocation(building_shaders.program, "building");
+        building_loc = glGetUniformLocation(building_shaders.program, "buildingTexture");
 
         glUniform1i(building_loc, 0);
     }

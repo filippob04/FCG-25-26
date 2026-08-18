@@ -542,14 +542,14 @@ public:
         // buildings
         building_shaders.use();
 
-        building_loc = glGetUniformLocation(building_shaders.program, "building");
+        building_loc = glGetUniformLocation(building_shaders.program, "buildingTexture");
 
         glUniform1i(building_loc, 0);
 
         // hud
         hud_shaders.use();
 
-        hud_loc = glGetUniformLocation(hud_shaders.program, "hud");
+        hud_loc = glGetUniformLocation(hud_shaders.program, "hudTexture");
 
         glUniform1i(hud_loc, 0);
     }

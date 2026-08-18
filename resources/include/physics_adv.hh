@@ -70,7 +70,7 @@ namespace fcg
 
                 // if i'm not holding the stick (WS + EQ) 
                 if (target_pitch == 0.0f) {auto_pitch = fw_dir.y * CENTERING_SPEED;}
-                if (target_roll == 0.0f) {auto_roll = right_dir.y * CENTERING_SPEED;}
+                if (target_roll == 0.0f) {auto_roll = right_dir.y * (CENTERING_SPEED * 1.5f);}
                 if (target_yaw != 0.0f) { 
                     turn_amount += current_yaw * yaw_velocity * dt; // how far i'm turning
                     turn_time += dt; // for how long i'm turning

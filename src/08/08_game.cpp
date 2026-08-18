@@ -41,7 +41,7 @@ public:
 
         window = new sf::Window (
                                  sf::VideoMode({window_width, window_height}),
-                                 "S6393212 - 07.cpp",
+                                 "S6393212 - 08.cpp",
                                  sf::Style::Default,
                                  sf::State::Windowed,
                                  settings
@@ -121,7 +121,7 @@ public:
     glm::mat4 p; // projection matrix
     glm::mat4 inv_v;
     glm::mat4 vp;
-
+    
 private:
 
     /** Intrinsic camera parameters **/
@@ -131,11 +131,15 @@ private:
     /** Extrinsic camera parameters **/
     // xyz, starting point of dynamic camera position
     glm::vec3 camera_pos = {0.0, 0.0, 0.0}; // xyz
+    glm::quat camera_dir = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // orientation
+    glm::vec3 camera_offset = glm::vec3(0.0, 0.5, 5.0); // camera offset
 
     // Angles defining the in-place camera rotation
     float yaw_deg = 0.0; // phi
     float pitch_deg = 0.0; // theta
     float roll_deg = 0.0;
+
+    const glm::vec3 OFFSET_VAR = glm::vec3 (0.0, 0.5, 5.0);
 
 public:
     Camera ()
@@ -172,10 +176,10 @@ public:
         float b = 2.0 * fcp * ncp / (ncp - fcp);   // coefficient 4th col
 
         p = glm::mat4(
-                        fd,  0.0,     0.0,  0.0,    // 1st column
-                        0.0, fd * ar, 0.0,  0.0,    // 2nd column
-                        0.0, 0.0,       a, -1.0,    // 3rd column
-                        0.0, 0.0,       b,  0.0     // 4th column
+                fd,  0.0,     0.0,  0.0,    // 1st column
+                0.0, fd * ar, 0.0,  0.0,    // 2nd column
+                0.0, 0.0,       a, -1.0,    // 3rd column
+                0.0, 0.0,       b,  0.0     // 4th column
         );
 
         // Compute VP matrix and update it
@@ -185,10 +189,25 @@ public:
     }
 
     // now the camera is attached to the rigid body, this method converts the physics engine quat to the cameras euler angles
-    void attach_to(const glm::vec3& target_pos, const glm::quat& target_dir) {
-        camera_pos = target_pos;
+    void attach_to(const glm::vec3& target_pos, const glm::quat& target_dir, bool show_hud, float dt) {
+        if (show_hud) { // like before, fixed camera
+            camera_pos = target_pos;
+            camera_dir = target_dir;
+        } else {
+            const float ADJ_SPEED = 5.0;
+            glm::vec3 offset = camera_offset; // camera offset
+            glm::vec3 rot_offset = target_dir * offset; // applies rotation
 
-        glm::mat4 rot_matrix = glm::mat4_cast(target_dir); // uses a quaternion instead of euler angles
+            // dynamic camera adjustments, same as physics_adv.hh
+            glm::vec3 pos_diff = (target_pos + rot_offset) - camera_pos;
+            camera_pos += (pos_diff * ADJ_SPEED * dt);
+
+            glm::quat rot_diff =  target_dir - camera_dir;
+            camera_dir += (rot_diff * ADJ_SPEED * dt); 
+            camera_dir = glm::normalize(camera_dir); // normalize
+        }
+
+        glm::mat4 rot_matrix = glm::mat4_cast(camera_dir); // uses a quaternion instead of euler angles
         glm::mat4 t = fcg::translation(-camera_pos.x, -camera_pos.y, -camera_pos.z);
 
         v = glm::transpose(rot_matrix) * t;
@@ -196,6 +215,9 @@ public:
         vp = p * v;
         inv_v = glm::inverse(v);
     }
+
+    void inc_offset () {if(camera_offset.z < 10.0f) {camera_offset += OFFSET_VAR;}}
+    void dec_offset () {if(camera_offset.z > 0.5f) {camera_offset -= OFFSET_VAR;}}
 };
 
 class GPUMesh
@@ -510,6 +532,8 @@ public:
     Lights lights;
 
     GPUMesh cube;
+    GPUMesh aircraft;
+
     Skybox skybox;
 
     Texture2D* blendmap = nullptr;
@@ -536,11 +560,16 @@ public:
     std::vector<Texture2D*> hud_t; 
 
     Audio audio; // audio
+
+    bool show_hud = true;
+
+    Texture2D* aircraft_t = nullptr;
 private:
     fcg::Shaders& main_shaders;
     fcg::Shaders& skybox_shaders;
     fcg::Shaders& building_shaders;
     fcg::Shaders& hud_shaders;
+    fcg::Shaders& aircraft_shaders;
 
     // ground
     GLint blendMap_loc;
@@ -551,10 +580,12 @@ private:
 
     GLint hud_loc;
 
+    GLint aircraft_loc;
 public:
-    Scene (std::string dirname, fcg::Shaders& main_sh, fcg::Shaders& skybox_sh, fcg::Shaders& building_sh, fcg::Shaders& hud_sh) :
+    Scene (std::string dirname, fcg::Shaders& main_sh, fcg::Shaders& skybox_sh, fcg::Shaders& building_sh, fcg::Shaders& hud_sh, fcg::Shaders& aircraft_sh) :
         camera (), lights (),
         cube (dirname + "off/cube.off"),
+        aircraft (dirname + "off/cessna.off"),
         skybox({
             dirname + "texture/skybox/clear/right.png", dirname + "texture/skybox/clear/left.png", 
             dirname + "texture/skybox/clear/up.png", dirname + "texture/skybox/clear/down.png", 
@@ -564,7 +595,8 @@ public:
         main_shaders(main_sh),
         skybox_shaders(skybox_sh),
         building_shaders(building_sh),
-        hud_shaders(hud_sh)
+        hud_shaders(hud_sh),
+        aircraft_shaders(aircraft_sh)
     {  
         // ground
         init_ground (dirname);
@@ -573,7 +605,7 @@ public:
         init_buildings (dirname);
 
         // player body
-        init_airplane ();
+        init_airplane (dirname);
 
         // hud
         init_hud (dirname);
@@ -606,6 +638,7 @@ public:
             }
             hud_t.clear();
         }
+        if (aircraft_t != nullptr) {delete aircraft_t;}
     }
 
     void locations ()
@@ -638,6 +671,13 @@ public:
         hud_loc = glGetUniformLocation(hud_shaders.program, "hudTexture");
 
         glUniform1i(hud_loc, 0);
+
+        // aircraft model
+        aircraft_shaders.use();
+
+        aircraft_loc = glGetUniformLocation(aircraft_shaders.program, "aircraftTexture");
+
+        glUniform1i(aircraft_loc, 0);
     }
 
     void init_ground ( std::string dirname) {
@@ -884,10 +924,11 @@ public:
         }
     }
 
-    void init_airplane () {
+    void init_airplane (std::string dirname) {
 
         airplane.position = { 0.0f, 10.0f, 0.0f };
         airplane.orientation = {1.0f, 0.0f, 0.0f, 0.0f};
+        aircraft_t = new Texture2D(dirname + "texture/aircraft/alloy.png");
     }
 
     void init_hud (std::string dirname) {
@@ -950,9 +991,10 @@ public:
 
         glm::mat4 root = fcg::identity ();
 
+        if (!show_hud) {draw_aircraft(root, aircraft_shaders);}
         draw_buildings(root, building_shaders);
         draw_floor (root, main_shaders);
-        draw_hud(camera, hud_shaders, airplane);
+        if (show_hud) {draw_hud(camera, hud_shaders, airplane);}
     }
 
     // method to check ground and building collision
@@ -964,7 +1006,6 @@ public:
             std::cout << "its not kerbal space program" << std::endl;
             return true;
         }
-        const float TOL = 1.0f; // tolerance (wingspan)
         for (building b : buildings) {
             // size
             float b_sx = b.model[0][0];
@@ -975,11 +1016,11 @@ public:
             // float b_y = b.model[3][1];
             float b_z = b.model[3][2];
 
-            if (airplane.position.x >= (b_x - b_sx/2) - TOL &&
-                airplane.position.x <= (b_x + b_sx/2) + TOL &&
-                airplane.position.y <= (b_sy) + TOL/3 &&
-                airplane.position.z >= (b_z - b_sz/2 - TOL) &&
-                airplane.position.z <= (b_z + b_sz/2) + TOL) {
+            if (airplane.position.x >= (b_x - b_sx/2) - 0.5 &&
+                airplane.position.x <= (b_x + b_sx/2) + 0.5 &&
+                airplane.position.y <= (b_sy) + 0.3 &&
+                airplane.position.z >= (b_z - b_sz/2 - 0.5) &&
+                airplane.position.z <= (b_z + b_sz/2) + 0.5) {
                 std::cout <<"building hit" << std::endl;
                 return true;
             }
@@ -1131,6 +1172,37 @@ private:
         glDepthFunc(GL_LESS);
         skybox.Unbind();
     }
+
+    void draw_aircraft (glm::mat4 parent_mm, fcg::Shaders& aircraft_shaders) {
+        aircraft_shaders.use();
+
+        GLint vp_loc_current = glGetUniformLocation(aircraft_shaders.program, "vp");
+        glUniformMatrix4fv(vp_loc_current, 1, GL_FALSE, &camera.vp[0][0]);
+
+        camera.send_position(aircraft_shaders);
+        lights.send_position(aircraft_shaders);
+        lights.send_parameters(aircraft_shaders);
+
+        glm::mat4 scale, rotate, translate, mm, ti_mm, adapt;
+        scale = fcg::scaling(1.0f, 1.0f, 1.0f); // possibly increase aircraft size
+        adapt = fcg::rotation_y(90.0f); // model heading correction        
+        rotate = glm::mat4_cast(airplane.orientation); // rotates as the physics model
+        translate = fcg::translation(airplane.position.x, airplane.position.y, airplane.position.z); // moves as well
+
+        mm = parent_mm * translate * rotate * adapt * scale * aircraft.to_unit_extent;
+        ti_mm = glm::transpose (glm::inverse (glm::mat3 (mm)));
+
+        GLint m_loc = glGetUniformLocation(aircraft_shaders.program, "model");
+        GLint tim_loc = glGetUniformLocation(aircraft_shaders.program, "tr_inv_model");
+
+        glUniformMatrix4fv(m_loc, 1, GL_FALSE, &mm[0][0]);
+        glUniformMatrix3fv (tim_loc, 1, GL_FALSE, &ti_mm[0][0]);
+
+        // texture bind
+        if (aircraft_t != nullptr) {aircraft_t->Bind(0);}
+
+        aircraft.draw ();
+    }
 };
 
 ////////////////////
@@ -1181,6 +1253,15 @@ void handle (const sf::Event::KeyPressed& key, Scene& scene)
         break;
     case sf::Keyboard::Scancode::Q:
         scene.airplane.set_roll_dir(1.0);
+        break;
+    case sf::Keyboard::Scancode::C:
+        scene.show_hud = !scene.show_hud; // disables (enables) hud
+        break;
+    case sf::Keyboard::Scancode::I:
+        if(!scene.show_hud){scene.camera.inc_offset();}
+        break;
+    case sf::Keyboard::Scancode::K:
+        if(!scene.show_hud){scene.camera.dec_offset();}
         break;
     default:
         return;
@@ -1234,14 +1315,15 @@ int main (int argc, char* argv[])
     Setup setup;
     sf::Window& window = *setup.window;
 
-    fcg::Shaders main_shaders ("./resources/vert/main_shader.vert", "./resources/frag/main_shader.frag");
-    fcg::Shaders skybox_shaders ("./resources/vert/skybox.vert", "./resources/frag/skybox.frag");
-    fcg::Shaders building_shaders ("./resources/vert/main_shader.vert", "./resources/frag/building.frag");
-    fcg::Shaders hud_shaders ("./resources/vert/hud.vert", "./resources/frag/hud.frag");
+    fcg::Shaders main_shaders (dirname + "vert/main_shader.vert", dirname + "frag/main_shader.frag");
+    fcg::Shaders skybox_shaders (dirname + "vert/skybox.vert", dirname + "frag/skybox.frag");
+    fcg::Shaders building_shaders (dirname + "vert/main_shader.vert", dirname + "frag/building.frag");
+    fcg::Shaders hud_shaders (dirname + "vert/hud.vert", dirname + "frag/hud.frag");
+    fcg::Shaders aircraft_shaders (dirname + "vert/aircraft.vert", dirname + "frag/aircraft.frag");
 
     main_shaders.use ();
 
-    Scene scene (dirname, main_shaders, skybox_shaders, building_shaders, hud_shaders);
+    Scene scene (dirname, main_shaders, skybox_shaders, building_shaders, hud_shaders, aircraft_shaders);
 
     glEnable (GL_CULL_FACE);
     glCullFace (GL_BACK);
@@ -1274,7 +1356,7 @@ int main (int argc, char* argv[])
         float elapsed = clock.restart().asSeconds();
 
         scene.airplane.update (elapsed);
-        scene.camera.attach_to(scene.airplane.position, scene.airplane.orientation);
+        scene.camera.attach_to(scene.airplane.position, scene.airplane.orientation, scene.show_hud, elapsed);
         scene.audio.set_speed(scene.airplane.get_speed());
         scene.audio.set_pitch(elapsed);
         

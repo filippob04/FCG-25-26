@@ -219,3 +219,17 @@ Forse la parte piu' complessa e' stata legare la variazione del pitch, oltre che
 Come per l'orizzonte virtuale, calcolo il valore di inclinazione rispetto al terreno grazie al valore y del vettore frontale (direzione dell'aereo) e lo utilizzo per creare uno scalare da aggiungere o sottrarre alla velocita' obbiettivo. Il resto della fisica rimane invariata.
 
 Infine aggiungo nel ciclo principale un controllo migliorato per `check_collision()` che ora riprodurra' un suono e visualizzera' lo schermo nero. `sf::sleep(sf::seconds(float s))` e' necessario per dare il tempo al programma di riprodurre il suono.
+
+## Tappa 08: Visuale in terza persona
+
+Nella penultima tappa ho deciso di implementare una visuale in terza persona del velivolo.
+
+Per prima cosa ho reperito da un sito web che fornisce alcuni modelli 3D gratuiti, un modello di un Cessna172. Essendo un file `.gdb` e volendo mantenere inalterate le funzioni di `mesh.hh` ho seguito un tutorial online per utilizzare `MeshLab` e convertire il modello in un file `.off`, e traducendo i poligoni complessi del modello originale in una lunga serie di triangoli digestibili dal loader.
+
+Il file che ho trovato portava con se molti attributi interessanti, ad esempio delle texture complesse applicabili solo su certe facce del modello piuttosto che altre. Ma traducendolo in un file primitivo `.off` ho perso tutti questi dati. (Inoltre avrei dovuto gestire piu' texture per lo stesso modello, problema la cui soluzione a me e' sconosciuta.)
+
+Successivamente ho definito un metodo `draw_aircraft` che, come per i metodi precedenti, posiziona l'aereo nel mondo tramite una serie di trasformazioni. In particolare in questo caso e' necessario ancorare il modello alla camera, al modello `fcg::airplane` che e' associato ad essa. Inoltre ho definito `adapt = fcg::rotation_y(90.0f)` per posizionare di prua il modello. In una fase iniziale utilizzavo lo shader base (phong) per illuminarlo di una tinta unita. Successivamente ho deciso di definirne uno ad hoc, `aircraft.vert (.frag)`e di applicargli una delle texture che era fornita con il modello. Il risultato e' accettabile ma molto lontano da quello ideale; questo perche', non avendo le coordinate texture, ho utilizzato come per i palazzi e lo sfondo `pos.xy` e quindi questa risulta spalmata sul velivolo.
+
+In seguito ho espanso il metodo `attach_to` di `Camera`, facendo si che se sono in terza persona (Premendo `C` non eseguo il render dell'HUD) definisco un offset rispetto alla posizione del target, ossia il modello dato da `fcg::airplane` con collisioni e movimenti. Oltre a cio', seguendo pressocche' la stessa logica di accelerazione e rotazioni varie, aggiungo un movimento dinamico fra la camera e il modello dell'aereo, cosi' da ottenere una sorta di smoothing fra i due. Per ultima cosa creo due metodi `inc(dec)_offset` che al premere di `I` e `K`, aumentano o diminuiscono la distanza dal velivolo.
+
+![08](../08.png)
