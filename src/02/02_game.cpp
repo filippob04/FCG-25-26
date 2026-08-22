@@ -620,10 +620,10 @@ private:
         skybox_shaders.use();
 
         glm::mat4 viewnt = glm::mat4(glm::mat3(camera.v)); // removing translation
-        glm::mat4 gWVP = camera.p * viewnt;
+        glm::mat4 vp = camera.p * viewnt;
 
-        GLint wvp_loc = glGetUniformLocation(skybox_shaders.program, "gWVP");
-        glUniformMatrix4fv(wvp_loc, 1, GL_FALSE, &gWVP[0][0]);
+        GLint vp_loc_current = glGetUniformLocation(skybox_shaders.program, "vp");
+        glUniformMatrix4fv(vp_loc_current, 1, GL_FALSE, &vp[0][0]);
 
         GLint model_loc = glGetUniformLocation(skybox_shaders.program, "model");
         glUniformMatrix4fv(model_loc, 1, GL_FALSE, &cube.to_unit_extent[0][0]);

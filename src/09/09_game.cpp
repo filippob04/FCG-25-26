@@ -1,6 +1,7 @@
 #define GLAD_GL_IMPLEMENTATION
 #include "../../resources/glad/gl.h"
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -10,6 +11,7 @@
 #include <string>
 #include <iostream>
 #include <cstdlib>
+#include <ctime>
 
 #include "../../resources/include/matrices.hh"
 #include "../../resources/include/mesh.hh"
@@ -40,7 +42,7 @@ public:
 
         window = new sf::Window (
                                  sf::VideoMode({window_width, window_height}),
-                                 "S6393212 - 06.cpp",
+                                 "S6393212 - 09.cpp",
                                  sf::Style::Default,
                                  sf::State::Windowed,
                                  settings
@@ -82,7 +84,7 @@ public:
     glm::vec3 sun_pos = {1000.0, 2000.0, 0.0};     // sky high light
     glm::vec3 light_direct_pos = {0.0, 0.0, 0.0};   // xyz (absolute, in world coordinates)
     glm::vec3 light_direct_val = {0.75, 0.73, 0.70};   // rgb
-    glm::vec3 light_ambient_val = {0.2, 0.2, 0.2};  // rgb
+    glm::vec3 light_ambient_val = {0.15, 0.15, 0.15};  // rgb
 
     // not used
     glm::vec3 material_diffuse = {1.0, 1.0, 1.0};   // rgb
@@ -97,7 +99,7 @@ public:
         light_direct_pos = sun_pos;
     }
 
-    void send_parameters (fcg::Shaders& current_shader)
+    void send_parameters (const fcg::Shaders& current_shader)
     {
         glUniform3fv (glGetUniformLocation(current_shader.program, "light.direct_val"), 1, &light_direct_val[0]);
         glUniform3fv (glGetUniformLocation(current_shader.program, "light.ambient_val"), 1, &light_ambient_val[0]);
@@ -107,7 +109,7 @@ public:
         glUniform1fv (glGetUniformLocation(current_shader.program, "material.shininess"), 1, &material_shininess);
     }
 
-    void send_position (fcg::Shaders& current_shader)
+    void send_position (const fcg::Shaders& current_shader)
     {
         glUniform3fv (glGetUniformLocation(current_shader.program, "light.direct_pos"), 1, &light_direct_pos[0]);
     }
@@ -119,8 +121,8 @@ public:
     glm::mat4 v; // view matrix
     glm::mat4 p; // projection matrix
     glm::mat4 inv_v;
-    glm::mat4 vp;
-
+    glm::mat4 vp; // final matrix
+    
 private:
 
     /** Intrinsic camera parameters **/
@@ -130,71 +132,77 @@ private:
     /** Extrinsic camera parameters **/
     // xyz, starting point of dynamic camera position
     glm::vec3 camera_pos = {0.0, 0.0, 0.0}; // xyz
+    glm::quat camera_dir = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // orientation
+    glm::vec3 camera_offset = glm::vec3(0.0, 0.5, 5.0); // camera offset
 
-    // Angles defining the in-place camera rotation
-    float yaw_deg = 0.0; // phi
-    float pitch_deg = 0.0; // theta
-    float roll_deg = 0.0;
+    const glm::vec3 OFFSET_VAR = glm::vec3 (0.0, 0.5, 5.0);
 
 public:
     Camera ()
     {
         set_window_size (Setup::window_width, Setup::window_height);
-        view_projection ();
     }
 
-    void send_position (fcg::Shaders& shaders)
+    void send_position (const fcg::Shaders& shaders)
     {   
         GLint camera_pos_loc = glGetUniformLocation (shaders.program, "camera_pos");
         glUniform3fv(camera_pos_loc, 1, &camera_pos[0]);
     }
 
-    void set_window_size (int w, int h)
+    void set_window_size (const int w, const int h)
     {
         ar = ((float) w) / (float) h;
-        view_projection ();
+        update_projection ();
     }
 
-    void view_projection ()
+    void update_projection ()
     {
-        const glm::vec3 cp = camera_pos;
         float ncp = 0.1f; float fcp = 2000.0f; // fixed
-
-        // prepare rotations and translation matrices
-        glm::mat4 rz = fcg::rotation_z (roll_deg); // new roll matrix
-        glm::mat4 ry = fcg::rotation_y (yaw_deg);
-        glm::mat4 rx = fcg::rotation_x (pitch_deg);
-        glm::mat4 t = fcg::translation (-cp.x, -cp.y, -cp.z);
 
         // prepare projection matrix
         float a = (fcp + ncp) / (ncp - fcp);       // coefficient 3rd col
         float b = 2.0 * fcp * ncp / (ncp - fcp);   // coefficient 4th col
 
+        // compute projecton matrix
         p = glm::mat4(
-                        fd,  0.0,     0.0,  0.0,    // 1st column
-                        0.0, fd * ar, 0.0,  0.0,    // 2nd column
-                        0.0, 0.0,       a, -1.0,    // 3rd column
-                        0.0, 0.0,       b,  0.0     // 4th column
+                fd,  0.0,     0.0,  0.0,    // 1st column
+                0.0, fd * ar, 0.0,  0.0,    // 2nd column
+                0.0, 0.0,       a, -1.0,    // 3rd column
+                0.0, 0.0,       b,  0.0     // 4th column
         );
-
-        // Compute VP matrix and update it
-        v = rz * rx * ry * t;
-        vp = p * v;
-        inv_v = glm::inverse (v);
     }
 
     // now the camera is attached to the rigid body, this method converts the physics engine quat to the cameras euler angles
-    void attach_to(const glm::vec3& target_pos, const glm::quat& target_dir) {
-        camera_pos = target_pos;
+    void attach_to(const glm::vec3& target_pos, const glm::quat& target_dir, const bool show_hud, const float dt) {
+        if (show_hud) { // like before, fixed camera
+            camera_pos = target_pos;
+            camera_dir = target_dir;
+        } else {
+            const float ADJ_SPEED = 5.0;
+            glm::vec3 offset = camera_offset; // camera offset
+            glm::vec3 rot_offset = target_dir * offset; // applies rotation
 
-        glm::mat4 rot_matrix = glm::mat4_cast(target_dir); // uses a quaternion instead of euler angles
+            // dynamic camera adjustments, same as physics_adv.hh
+            glm::vec3 pos_diff = (target_pos + rot_offset) - camera_pos;
+            camera_pos += (pos_diff * ADJ_SPEED * dt);
+
+            glm::quat rot_diff =  target_dir - camera_dir;
+            camera_dir += (rot_diff * ADJ_SPEED * dt); 
+            camera_dir = glm::normalize(camera_dir); // normalize
+        }
+
+        // computes view matrix
+        glm::mat4 rot_matrix = glm::mat4_cast(camera_dir); // uses a quaternion instead of euler angles
         glm::mat4 t = fcg::translation(-camera_pos.x, -camera_pos.y, -camera_pos.z);
 
         v = glm::transpose(rot_matrix) * t;
         
-        vp = p * v;
+        vp = p * v; // joins view and projection matrices
         inv_v = glm::inverse(v);
     }
+
+    void inc_offset () {if(camera_offset.z < 10.0f) {camera_offset += OFFSET_VAR;}}
+    void dec_offset () {if(camera_offset.z > 0.5f) {camera_offset -= OFFSET_VAR;}}
 };
 
 class GPUMesh
@@ -323,7 +331,7 @@ protected:
 
 class Skybox {
     public:
-        Skybox (std::vector<std::string> path) {
+        Skybox (const std::vector<std::string> path) {
             glGenTextures(1, &id); // creates 1 texture and memorizes its id
             glBindTexture(GL_TEXTURE_CUBE_MAP, id); // its a cubemap!
 
@@ -374,7 +382,7 @@ class Skybox {
 
 class Texture2D {
     public:
-        Texture2D(const std::string& path) {
+        Texture2D(const std::string& path, const bool repeat) {
             sf::Image img;
 
                 if(!img.loadFromFile(path)) {
@@ -400,16 +408,21 @@ class Texture2D {
                     pixelData
                 );
 
-                // repeat ground texture
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-                
-                // what happens to the texture the closer (further) the camera is 
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                if (repeat) {
+                    // repeat ground texture
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-                // creates the mipmap
-                glGenerateMipmap(GL_TEXTURE_2D);
+                    // what happens to the texture the closer (further) the camera is 
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+                    // creates the mipmap
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                } else { // HUD, no mipmapping
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                }
         }
         ~Texture2D() {glDeleteTextures(1, &id);}
         
@@ -423,79 +436,250 @@ class Texture2D {
         GLuint id;
     };
 
+class Audio {
+    private:
+        sf::SoundBuffer engineBuffer;
+        sf::SoundBuffer clickBuffer;
+        sf::SoundBuffer crashBuffer;
+        sf::SoundBuffer terrainAlarmBuffer;
+        sf::SoundBuffer stallAlarmBuffer;
+
+        float current_pitch = 1.0f;
+        float target_pitch = current_pitch;
+    public:
+        sf::Sound engine;
+        sf::Sound click;
+        sf::Sound crash;
+        sf::Sound alarm_terrain;
+        sf::Sound alarm_stall;
+
+        sf::Music ambient;
+    public:
+        Audio (const std::string dirname) : 
+            engine(engineBuffer), 
+            click(clickBuffer), 
+            crash(crashBuffer), 
+            alarm_terrain(terrainAlarmBuffer),
+            alarm_stall(stallAlarmBuffer)
+        {
+            if (!ambient.openFromFile(dirname + "sound/ambient.mp3")) {
+                std::cerr << "Failure: error during SFML Audio Loading." << std::endl;
+            }
+
+            if (!engineBuffer.loadFromFile(dirname + "sound/engine.wav")) {
+                std::cerr << "Failure: error during SFML Audio Loading." << std::endl;
+            }
+
+            if (!clickBuffer.loadFromFile(dirname + "sound/click.wav")) {
+                std::cerr << "Failure: error during SFML Audio Loading." << std::endl;
+            }
+
+            if (!crashBuffer.loadFromFile(dirname + "sound/crash.wav")) {
+                std::cerr << "Failure: error during SFML Audio Loading." << std::endl;
+            }
+
+            if (!terrainAlarmBuffer.loadFromFile(dirname + "sound/terrain.wav")) {
+                std::cerr << "Failure: error during SFML Audio Loading." << std::endl;
+            }
+
+            if (!stallAlarmBuffer.loadFromFile(dirname + "sound/stall.wav")) {
+                std::cerr << "Failure: error during SFML Audio Loading." << std::endl;
+            }
+
+            // sound properties
+            engine.setLooping(true); // loops
+            engine.setPitch(current_pitch);
+            // ambient noise
+            ambient.setLooping(true);
+            // alarm sounds
+            alarm_terrain.setLooping(true); 
+            alarm_stall.setLooping(true); 
+
+            attenuation (true); // starts inside the cockpit
+        }
+
+        void set_speed (const float current_speed) { // set sound pitch based on aircraft speed, not throttle level
+            target_pitch = current_speed * 0.17f;
+        }
+
+        void set_pitch (const float dt) { // dynamic pitch
+            float diff = target_pitch - current_pitch;
+            current_pitch += diff * dt;
+            engine.setPitch(current_pitch);
+        }
+
+        void stop () { // stops all sounds
+            engine.stop();
+            click.stop();
+            crash.stop();
+            ambient.stop();
+            alarm_stall.stop();
+            alarm_terrain.stop();
+        }
+
+        void t_up () { // throttle level up
+            click.setPitch(1.1f);
+            click.play();
+        }
+
+        void t_down () { // throttle level down
+            click.setPitch(0.9f);
+            click.play();
+        }
+
+        void stuck () { // stuck throttle
+            click.setPitch(0.3f);
+            click.play();
+        }
+
+        void attenuation (const bool isInside) { // inside/outside difference
+            if (isInside) {
+                engine.setVolume(32.5f);
+                click.setVolume(40.0f);
+                ambient.setVolume(20.0f);
+                alarm_stall.setVolume(100.0f);
+                alarm_terrain.setVolume(100.0f);
+            } else {
+                engine.setVolume(75.0f);
+                click.setVolume(20.0f);
+                ambient.setVolume(70.0f);
+                alarm_stall.setVolume(50.0f);
+                alarm_terrain.setVolume(50.0f);
+            }
+        }
+};
+
+struct building { // shared struct
+    glm::mat4 model;
+    Texture2D* texture;
+};
+
+class Scene_aux 
+{
+    public:
+        fcg::Airplane& airplane;
+        Audio audio;
+    public:
+        Scene_aux (const std::string dirname, fcg::Airplane& airplane_ref) :
+        airplane(airplane_ref),
+        audio(dirname) 
+        {
+            // audio
+            audio.engine.play();
+            audio.ambient.play();
+        }
+        ~Scene_aux() {}
+
+        // method to check ground and building collision
+        bool check_collision (const std::vector<building>& buildings) {
+            check_bounds(); // checks for altitude and speed
+            if (airplane.position.y <= 0.5f) {
+                std::cout << "ground check" << std::endl;
+                return true;
+            } else if (airplane.position.y >= 50.f) {
+                std::cout << "you flew too high" << std::endl;
+                return true;
+            }
+            for (building b : buildings) {
+                // size
+                float b_sx = b.model[0][0];
+                float b_sy = b.model[1][1];
+                float b_sz = b.model[2][2];
+                // position
+                float b_x = b.model[3][0];
+                // float b_y = b.model[3][1];
+                float b_z = b.model[3][2];
+
+                if (airplane.position.x >= (b_x - b_sx/2) - 0.5 &&
+                    airplane.position.x <= (b_x + b_sx/2) + 0.5 &&
+                    airplane.position.y <= (b_sy) + 0.3 &&
+                    airplane.position.z >= (b_z - b_sz/2 - 0.5) &&
+                    airplane.position.z <= (b_z + b_sz/2) + 0.5) {
+                    std::cout <<"building hit" << std::endl;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // checks for altitude and low speed
+        void check_bounds () {
+            if (airplane.position.y < 3.0f) {
+                if (audio.alarm_terrain.getStatus() != sf::Sound::Status::Playing) {audio.alarm_terrain.play();}
+            } else if (airplane.get_speed() < 3.0f) {
+                if (audio.alarm_stall.getStatus() != sf::Sound::Status::Playing) {audio.alarm_stall.play();}
+            } else { // stops
+                audio.alarm_terrain.stop();
+                audio.alarm_stall.stop();
+            }
+        }
+};
+
 class Scene
 {
 public:
     Camera camera;
-    Lights lights;
+    fcg::Airplane airplane; // logic airplane model
+    Scene_aux scene_aux; // audio and logic helper
 
-    GPUMesh cube;
-    Skybox skybox;
-
-    Texture2D* blendmap = nullptr;
-    std::vector<Texture2D*> ground;
-
-    struct building {
-        glm::mat4 model;
-        Texture2D* texture;
-    };
-
+    // drawable elements
     std::vector<building> buildings;
-    std::vector<Texture2D*> buildings_t;
-
-    fcg::Airplane airplane;
-
-    // hud elements
     struct hud_element {
         glm::vec3 size;
         glm::vec3 pos;
         Texture2D* texture;
     };
-
     std::vector<hud_element> hud;
+    bool show_hud = true;
+    
+private:
+    Lights lights;
+    Skybox skybox; // skybox
+
+    GPUMesh cube;
+    GPUMesh aircraft;
+
+    // Textures
+    Texture2D* blendmap = nullptr;
+    std::vector<Texture2D*> ground;
+    std::vector<Texture2D*> buildings_t;
+    Texture2D* aircraft_t = nullptr;
     std::vector<Texture2D*> hud_t; 
 
-private:
+    // Shaders
     fcg::Shaders& main_shaders;
     fcg::Shaders& skybox_shaders;
     fcg::Shaders& building_shaders;
     fcg::Shaders& hud_shaders;
+    fcg::Shaders& aircraft_shaders;
 
-    // ground
+    // gpu loc
     GLint blendMap_loc;
     std::vector<GLint> texture_loc;
     GLint tiling_loc;
-
     GLint building_loc;
-
     GLint hud_loc;
-
+    GLint aircraft_loc;
 public:
-    Scene (std::string dirname, fcg::Shaders& main_sh, fcg::Shaders& skybox_sh, fcg::Shaders& building_sh, fcg::Shaders& hud_sh) :
-        camera (), lights (),
-        cube (dirname + "off/cube.off"),
+    Scene (const std::string dirname, fcg::Shaders& main_sh, fcg::Shaders& skybox_sh, fcg::Shaders& building_sh, fcg::Shaders& hud_sh, fcg::Shaders& aircraft_sh) :
+        camera (), 
+        scene_aux(dirname, airplane),
+        lights (),
         skybox({
             dirname + "texture/skybox/clear/right.png", dirname + "texture/skybox/clear/left.png", 
             dirname + "texture/skybox/clear/up.png", dirname + "texture/skybox/clear/down.png", 
             dirname + "texture/skybox/clear/front.png", dirname + "texture/skybox/clear/back.png"
-        }), 
+        }),
+        cube (dirname + "off/cube.off"),
+        aircraft (dirname + "off/cessna.off"),
         main_shaders(main_sh),
         skybox_shaders(skybox_sh),
         building_shaders(building_sh),
-        hud_shaders(hud_sh)
+        hud_shaders(hud_sh),
+        aircraft_shaders(aircraft_sh)
     {  
-        // ground
-        init_ground (dirname);
-        
-        // buildings
-        init_buildings (dirname);
-
-        // player body
-        init_airplane ();
-
-        // hud
-        init_hud (dirname);
-
+        // scene initialize
+        init_scene (dirname);
         locations ();
     }
     ~Scene() {
@@ -520,296 +704,156 @@ public:
             }
             hud_t.clear();
         }
+        if (aircraft_t != nullptr) {delete aircraft_t;}
     }
 
-    void locations ()
+    void draw ()
     {   
-        // ground
-        main_shaders.use();
+        // clear the buffers
+        glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // draw skybox
+        draw_skybox(skybox_shaders);
+
+        glm::mat4 root = fcg::identity ();
+
+        if (!show_hud) {draw_aircraft(root, aircraft_shaders);}
+        draw_buildings(root, building_shaders);
+        draw_floor (root, main_shaders);
+        if (show_hud) {draw_hud(camera, hud_shaders, airplane);}
+    }
+
+private:
+   void locations ()
+    {   // ground
+        main_shaders.use();
         blendMap_loc = glGetUniformLocation(main_shaders.program, "blend_map");
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 4; ++i) { // needs all textures at the same time
             texture_loc.push_back(glGetUniformLocation(main_shaders.program, (std::string("texture") + std::to_string(i)).c_str()));
         }
         tiling_loc = glGetUniformLocation(main_shaders.program, "tiling_factor");
-
         glUniform1i(blendMap_loc, 0);
         for (int i = 0; i < ground.size(); ++i) {
             glUniform1i(texture_loc.at(i), i+1);
-        }
+        } 
         glUniform1f(tiling_loc, 300.0f);
 
         // buildings
         building_shaders.use();
-
-        building_loc = glGetUniformLocation(building_shaders.program, "buildingTexture");
-
+        building_loc = glGetUniformLocation(building_shaders.program, "buildingTexture"); // overload
         glUniform1i(building_loc, 0);
 
         // hud
         hud_shaders.use();
-
         hud_loc = glGetUniformLocation(hud_shaders.program, "hudTexture");
-
         glUniform1i(hud_loc, 0);
+
+        // aircraft model
+        aircraft_shaders.use();
+        aircraft_loc = glGetUniformLocation(aircraft_shaders.program, "aircraftTexture");
+        glUniform1i(aircraft_loc, 0);
     }
 
-    void init_ground ( std::string dirname) {
-        blendmap = new Texture2D(dirname + "texture/ground/BlendMap.png");
+    void init_scene (const std::string dirname) {
+        init_ground(dirname);
+        init_buildings(dirname);
+        init_airplane(dirname);
+        init_hud(dirname);
+    }
+
+    void init_ground (const std::string dirname) {
+        blendmap = new Texture2D(dirname + "texture/ground/BlendMap.png", false);
 
         // ground textures
-        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/city_grass.png"));
-        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/road_tarmac5.png"));
-        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/city_roofs.png"));
-        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/dark_water.jpg"));
+        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/city_grass.png", true));
+        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/road_tarmac5.png", true));
+        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/city_roofs.png", true));
+        ground.push_back(new Texture2D(dirname + "texture/ground/terrain/dark_water.jpg", true));
+    }
+    // returns a vec3 containing three random floats in [MIN, MAX]
+    glm::vec3 random_vec3 (const glm::vec3 MIN, const glm::vec3 MAX) {
+        const glm::vec3 RANGE = MAX - MIN;
+        float x = RANGE.x * ((((float) rand()) / (float) RAND_MAX)) + MIN.x; 
+        float y = RANGE.y * ((((float) rand()) / (float) RAND_MAX)) + MIN.y; 
+        float z = RANGE.z * ((((float) rand()) / (float) RAND_MAX)) + MIN.z; 
+        return glm::vec3 (x, y, z);
     }
 
-    void init_buildings (std::string dirname) {
+    bool check_overlap (const glm::mat4& current) { // similar to airplane check_collision
+        // size
+        float c_sx = current[0][0]/2;
+        float c_sz = current[2][2]/2;
+        // position
+        float c_x = current[3][0];
+        float c_z = current[3][2];
+        for (building& b : buildings) {
+                // size
+                float b_sx = b.model[0][0]/2;
+                float b_sz = b.model[2][2]/2;
+                // position
+                float b_x = b.model[3][0];
+                float b_z = b.model[3][2];
+
+                bool overlap_x = (c_x - c_sx) <= (b_x + b_sx) && (c_x + c_sx) >= (b_x - b_sx);
+                bool overlap_z = (c_z - c_sz) <= (b_z + b_sz) && (c_z + c_sz) >= (b_z - b_sz);
+
+                if (overlap_x && overlap_z) {return true;}
+        }
+        return false;
+    }
+
+    void building_cluster (const glm::vec3 center, const int n) {
+        for (unsigned int i = 0; i < n; ++i) {
+            building b;
+            b.texture = buildings_t.at(i % buildings_t.size());
+            glm::mat4 size, pos;
+            do {
+                glm::vec3 rs = random_vec3(glm::vec3(2.0, 5.0, 2.0), glm::vec3(3.0, 18.0, 3.0));
+                size = fcg::scaling(rs.x, rs.y, rs.z);
+
+                glm::vec3 rp = random_vec3(glm::vec3(-10.0, 0.0, -10.0), glm::vec3(10.0, 0.0, 10.0));
+                pos = fcg::translation(rp.x + center.x, (rs.y/2.0) + center.y, rp.z + center.z); // rs.y/2.0 so it stays on the ground
+
+                b.model = pos * size;
+            } while (check_overlap(b.model));
+            buildings.push_back(b);
+        }
+    }
+
+    void init_buildings (const std::string dirname) {
 
         // buildings textures
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/2.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/6.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/9.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/3.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/0.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/5.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/8.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/4.jpg"));
+        std::string tex_dir = dirname + "texture/building/";
+        int n_tex = 15;
+        for (int i = 0; i <= n_tex; ++i) {
+            std::string filepath = tex_dir + std::to_string(i) + ".jpg";
+            buildings_t.push_back(new Texture2D(filepath, true));
+        }
 
-        unsigned int i = 0;
-        // positioning
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 12.0, 3.0);
-            glm::mat4 pos = fcg::translation(-27.0, 6.0, -11.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.0, 10.0, 3.0);
-            glm::mat4 pos = fcg::translation(-23.0, 5.0, -15.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(1.8, 8.0, 2.0);
-            glm::mat4 pos = fcg::translation(-24.0, 4.0, -9.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 8.0, 2.0);
-            glm::mat4 pos = fcg::translation(-20.0, 4.0, -12.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.3, 10.0, 2.0);
-            glm::mat4 pos = fcg::translation(-3.0, 5.0, -30.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.5, 11.0, 2.0);
-            glm::mat4 pos = fcg::translation(-5.0, 5.5, -26.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 14.0, 2.5);
-            glm::mat4 pos = fcg::translation(-10.0, 7.0, -32.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 12.0, 2.5);
-            glm::mat4 pos = fcg::translation(-11.0, 6.0, -28.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        i = 0;
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 6.0, 3.0);
-            glm::mat4 pos = fcg::translation(-3.0, 3.0, -80.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.0, 10.0, 3.0);
-            glm::mat4 pos = fcg::translation(1.0, 5.0, -84.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.0, 11.0, 2.2);
-            glm::mat4 pos = fcg::translation(0.0, 5.5, -82.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 8.0, 2.0);
-            glm::mat4 pos = fcg::translation(4.0, 4.0, -79.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.3, 10.0, 2.0);
-            glm::mat4 pos = fcg::translation(-8.0, 5.0, 35.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.5, 11.0, 2.0);
-            glm::mat4 pos = fcg::translation(-10.0, 5.5, 39.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 14.0, 2.5);
-            glm::mat4 pos = fcg::translation(-15.0, 7.0, 42.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 12.0, 2.5);
-            glm::mat4 pos = fcg::translation(-16.0, 6.0, 37.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        i = 0;
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 6.0, 3.0);
-            glm::mat4 pos = fcg::translation(97.0, 3.0, -80.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.0, 14.0, 3.0);
-            glm::mat4 pos = fcg::translation(101.0, 7.0, -84.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.0, 9.0, 2.2);
-            glm::mat4 pos = fcg::translation(100.0, 4.5, -82.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 10.0, 2.0);
-            glm::mat4 pos = fcg::translation(104.0, 5.0, -79.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.3, 10.0, 2.0);
-            glm::mat4 pos = fcg::translation(-8.0, 5.0, 35.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(2.5, 12.0, 2.0);
-            glm::mat4 pos = fcg::translation(-120.0, 6.0, 9.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 8.0, 2.5);
-            glm::mat4 pos = fcg::translation(-125.0, 4.0, 12.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
-        {
-            building b;
-            b.texture = buildings_t.at(i);
-            i++;
-            glm::mat4 size = fcg::scaling(3.0, 10.0, 2.5);
-            glm::mat4 pos = fcg::translation(-126.0, 5.0, 7.0);
-            b.model = pos * size;
-            buildings.push_back(b);
-        }
+        building_cluster(glm::vec3(0.0, 0.0, 20.0), 10);
+        building_cluster(glm::vec3(-120.0, 0.0, -50.0), 5);
+        building_cluster(glm::vec3(20.0, 0.0, -60.0), 10);
+        building_cluster(glm::vec3(-15.0, 0.0, -75.0), 15);
+        building_cluster(glm::vec3(5.0, 0.0, -120.0), 10);
+        building_cluster(glm::vec3(65.0, 0.0, -120.0), 10);
+        building_cluster(glm::vec3(-45.0, 0.0, 25.0), 5);
+        building_cluster(glm::vec3(40.0, 0.0, 30.0), 10);
+        building_cluster(glm::vec3(-150.0, 0.0, 0.0), 15);
+        building_cluster(glm::vec3(-130, 0.0, -150.0), 10);
     }
 
-    void init_airplane () {
-
+    void init_airplane (const std::string dirname) {
         airplane.position = { 0.0f, 10.0f, 0.0f };
         airplane.orientation = {1.0f, 0.0f, 0.0f, 0.0f};
+        aircraft_t = new Texture2D(dirname + "texture/aircraft/alloy.png", true);
     }
 
-    void init_hud (std::string dirname) {
-        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/cockpit.png")); // 0
-        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/yaw.png")); // 1
-        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/roll.png")); // 2
-        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/speed.png")); // 3
-        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/yoke.png")); // 4
+    void init_hud (const std::string dirname) {
+        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/cockpit.png", false)); // 0
+        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/yaw.png", false)); // 1
+        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/roll.png", false)); // 2
+        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/speed.png", false)); // 3
+        hud_t.push_back(new Texture2D(dirname + "texture/aircraft/yoke.png",false)); // 4
 
         unsigned int i = 0;
         {
@@ -854,55 +898,7 @@ public:
         }
     }
 
-    void draw ()
-    {   
-        // clear the buffers
-        glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // draw skybox
-        draw_skybox(skybox_shaders);
-
-        glm::mat4 root = fcg::identity ();
-
-        draw_buildings(root, building_shaders);
-        draw_floor (root, main_shaders);
-        draw_hud(camera, hud_shaders, airplane);
-    }
-
-    // method to check ground and building collision
-    bool check_collision () {
-        if (airplane.position.y <= 0.5f) {
-            std::cout << "ground check" << std::endl;
-            return true;
-        } else if (airplane.position.y >= 50.f) {
-            std::cout << "its not kerbal space program" << std::endl;
-            return true;
-        }
-        const float TOL = 1.0f; // tolerance (wingspan)
-        for (building b : buildings) {
-            // size
-            float b_sx = b.model[0][0];
-            float b_sy = b.model[1][1];
-            float b_sz = b.model[2][2];
-            // position
-            float b_x = b.model[3][0];
-            // float b_y = b.model[3][1];
-            float b_z = b.model[3][2];
-
-            if (airplane.position.x >= (b_x - b_sx/2) - TOL &&
-                airplane.position.x <= (b_x + b_sx/2) + TOL &&
-                airplane.position.y <= (b_sy) + TOL &&
-                airplane.position.z >= (b_z - b_sz/2 - TOL) &&
-                airplane.position.z <= (b_z + b_sz/2) + TOL) {
-                std::cout <<"building hit" << std::endl;
-                return true;
-            }
-        }
-        return false;
-    }
-
-private:
-    void draw_cube (glm::mat4 parent_mm, fcg::Shaders& current_shader)
+    void draw_cube (const glm::mat4 parent_mm, fcg::Shaders& current_shader)
     {
         glm::mat4 mm;
         glm::mat3 ti_mm;
@@ -917,9 +913,7 @@ private:
         cube.draw ();
     }
 
-    // A floor, drawn in the unitary cube
-    // returns floor level in world coordinates
-    float draw_floor (glm::mat4 parent_mm, fcg::Shaders& ground_shader)
+    float draw_floor (const glm::mat4 parent_mm, fcg::Shaders& ground_shader)
     {   
         ground_shader.use();
 
@@ -941,9 +935,7 @@ private:
         translate = fcg::translation (0, -h_height - h_depth, 0); // lower it down
         mm = parent_mm * translate * scale;
 
-        if (blendmap != nullptr) {
-            blendmap->Bind(0);
-        }
+        if (blendmap != nullptr) {blendmap->Bind(0);}
         if (!ground.empty()) {
             for (int i = 0; i < ground.size(); ++i) {
                 ground.at(i)->Bind(i+1);
@@ -954,7 +946,7 @@ private:
         return -h_height;
     }
 
-    void draw_buildings (glm::mat4 parent_mm, fcg::Shaders& building_shaders) {
+    void draw_buildings (const glm::mat4 parent_mm, fcg::Shaders& building_shaders) {
         building_shaders.use();
 
         GLint vp_loc_current = glGetUniformLocation(building_shaders.program, "vp");
@@ -966,12 +958,11 @@ private:
 
         for (building b : buildings) {
             b.texture->Bind(0); 
-
             draw_cube(parent_mm * b.model, building_shaders);
         }
     }
 
-    void draw_hud (Camera camera, fcg::Shaders& hud_shaders, fcg::Airplane airplane) {
+    void draw_hud (const Camera camera, fcg::Shaders& hud_shaders, fcg::Airplane airplane) {
         hud_shaders.use();
 
         GLint vp_loc_current = glGetUniformLocation(hud_shaders.program, "vp");
@@ -990,6 +981,7 @@ private:
             glm::mat4 rot = fcg::rotation_z(0.0f);
             glm::mat4 trans = fcg::translation(h.pos.x, h.pos.y, h.pos.z);
 
+            // animations
             if (i == 1) { // yaw thingy
                 offset = airplane.get_yaw() * 0.03f;
                 trans = fcg::translation(h.pos.x + offset, h.pos.y, h.pos.z);
@@ -1045,6 +1037,37 @@ private:
         glDepthFunc(GL_LESS);
         skybox.Unbind();
     }
+
+    void draw_aircraft (const glm::mat4 parent_mm, fcg::Shaders& aircraft_shaders) {
+        aircraft_shaders.use();
+
+        GLint vp_loc_current = glGetUniformLocation(aircraft_shaders.program, "vp");
+        glUniformMatrix4fv(vp_loc_current, 1, GL_FALSE, &camera.vp[0][0]);
+
+        camera.send_position(aircraft_shaders);
+        lights.send_position(aircraft_shaders);
+        lights.send_parameters(aircraft_shaders);
+
+        glm::mat4 scale, rotate, translate, mm, ti_mm, adapt;
+        scale = fcg::scaling(1.0f, 1.0f, 1.0f); // possibly increase aircraft size
+        adapt = fcg::rotation_y(90.0f); // model heading correction        
+        rotate = glm::mat4_cast(airplane.orientation); // rotates as the physics model
+        translate = fcg::translation(airplane.position.x, airplane.position.y, airplane.position.z); // moves as well
+
+        mm = parent_mm * translate * rotate * adapt * scale * aircraft.to_unit_extent;
+        ti_mm = glm::transpose (glm::inverse (glm::mat3 (mm)));
+
+        GLint m_loc = glGetUniformLocation(aircraft_shaders.program, "model");
+        GLint tim_loc = glGetUniformLocation(aircraft_shaders.program, "tr_inv_model");
+
+        glUniformMatrix4fv(m_loc, 1, GL_FALSE, &mm[0][0]);
+        glUniformMatrix3fv (tim_loc, 1, GL_FALSE, &ti_mm[0][0]);
+
+        // texture bind
+        if (aircraft_t != nullptr) {aircraft_t->Bind(0);}
+
+        aircraft.draw ();
+    }
 };
 
 ////////////////////
@@ -1058,15 +1081,25 @@ void handle (const sf::Event::Resized& resized, Camera& camera)
 }
 
 void handle (const sf::Event::KeyPressed& key, Scene& scene)
-{
+{   
     switch (key.scancode) {
     case sf::Keyboard::Scancode::Escape:
         exit (0);
     case sf::Keyboard::Scancode::LShift:
-        scene.airplane.throttle_up();
+        if(scene.airplane.get_throttle_level() != 5) {
+            scene.scene_aux.audio.t_up();
+            scene.airplane.throttle_up();
+        } else {
+            scene.scene_aux.audio.stuck();
+        }
         break;
     case sf::Keyboard::Scancode::LControl:
-        scene.airplane.throttle_down();
+        if(scene.airplane.get_throttle_level() != 0) {
+            scene.scene_aux.audio.t_down();
+            scene.airplane.throttle_down();
+        } else {
+            scene.scene_aux.audio.stuck();
+        }
         break;
     case sf::Keyboard::Scancode::W:
         scene.airplane.set_pitch_dir(-1.0);
@@ -1085,6 +1118,16 @@ void handle (const sf::Event::KeyPressed& key, Scene& scene)
         break;
     case sf::Keyboard::Scancode::Q:
         scene.airplane.set_roll_dir(1.0);
+        break;
+    case sf::Keyboard::Scancode::C:
+        scene.show_hud = !scene.show_hud; // disables (enables) hud
+        scene.scene_aux.audio.attenuation(scene.show_hud);
+        break;
+    case sf::Keyboard::Scancode::I:
+        if(!scene.show_hud){scene.camera.inc_offset();}
+        break;
+    case sf::Keyboard::Scancode::K:
+        if(!scene.show_hud){scene.camera.dec_offset();}
         break;
     default:
         return;
@@ -1121,37 +1164,31 @@ void handle (const sf::Event::KeyReleased& key, Scene& scene)
 // Main //
 //////////
 
-int main (int argc, char* argv[])
+int main ()
 {
-    std::string dirname = "resources/";
-    if (argc == 2) {
-        dirname = argv[1];
-    } else if (argc > 2) {
-        std::cout << "Usage: " << argv[0] << " [dirname]\n";
-        exit (1);
-    }
-    if (dirname.empty() || dirname.back() != '/')
-        dirname.push_back('/');
-
     //// Startup ////
-
     Setup setup;
     sf::Window& window = *setup.window;
 
-    fcg::Shaders main_shaders ("./resources/vert/main_shader.vert", "./resources/frag/main_shader.frag");
-    fcg::Shaders skybox_shaders ("./resources/vert/skybox.vert", "./resources/frag/skybox.frag");
-    fcg::Shaders building_shaders ("./resources/vert/main_shader.vert", "./resources/frag/building.frag");
-    fcg::Shaders hud_shaders ("./resources/vert/hud.vert", "./resources/frag/hud.frag");
+    std::string dirname = "resources/";
+    fcg::Shaders main_shaders (dirname + "vert/main_shader.vert", dirname + "frag/main_shader.frag");
+    fcg::Shaders skybox_shaders (dirname + "vert/skybox.vert", dirname + "frag/skybox.frag");
+    fcg::Shaders building_shaders (dirname + "vert/main_shader.vert", dirname + "frag/building.frag");
+    fcg::Shaders hud_shaders (dirname + "vert/hud.vert", dirname + "frag/hud.frag");
+    fcg::Shaders aircraft_shaders (dirname + "vert/aircraft.vert", dirname + "frag/aircraft.frag");
 
     main_shaders.use ();
-
-    Scene scene (dirname, main_shaders, skybox_shaders, building_shaders, hud_shaders);
+    srand(time(NULL)); // random buildings
+    Scene scene (dirname, main_shaders, skybox_shaders, building_shaders, hud_shaders, aircraft_shaders);
 
     glEnable (GL_CULL_FACE);
     glCullFace (GL_BACK);
 
     glEnable (GL_DEPTH_TEST);
 
+    // hide mouse
+    window.setMouseCursorGrabbed(true);
+    window.setMouseCursorVisible(false);
 
     //// Main Loop ////
 
@@ -1175,12 +1212,23 @@ int main (int argc, char* argv[])
         float elapsed = clock.restart().asSeconds();
 
         scene.airplane.update (elapsed);
-        scene.camera.attach_to(scene.airplane.position, scene.airplane.orientation);
-        if (scene.check_collision()) {return -1;}
+        scene.camera.attach_to(scene.airplane.position, scene.airplane.orientation, scene.show_hud, elapsed);
+        scene.scene_aux.audio.set_speed(scene.airplane.get_speed());
+        scene.scene_aux.audio.set_pitch(elapsed);
+        
+        if (scene.scene_aux.check_collision(scene.buildings)) { // checks for collisions
+            running = false;
+            
+            scene.scene_aux.audio.stop(); // stops all audio
+            scene.scene_aux.audio.crash.play(); // sound plays
+            glClear(GL_COLOR_BUFFER_BIT); // black screen
+            window.display();
 
-        scene.draw ();
-        window.display ();
+            sf::sleep(sf::seconds(0.5f)); // pauses the game, this allows the sound to play correctly
+        } else {
+            scene.draw ();
+            window.display ();
+        }
     }
-
     return 0;
 }

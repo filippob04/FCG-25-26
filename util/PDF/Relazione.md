@@ -233,3 +233,49 @@ Successivamente ho definito un metodo `draw_aircraft` che, come per i metodi pre
 In seguito ho espanso il metodo `attach_to` di `Camera`, facendo si che se sono in terza persona (Premendo `C` non eseguo il render dell'HUD) definisco un offset rispetto alla posizione del target, ossia il modello dato da `fcg::airplane` con collisioni e movimenti. Oltre a cio', seguendo pressocche' la stessa logica di accelerazione e rotazioni varie, aggiungo un movimento dinamico fra la camera e il modello dell'aereo, cosi' da ottenere una sorta di smoothing fra i due. Per ultima cosa creo due metodi `inc(dec)_offset` che al premere di `I` e `K`, aumentano o diminuiscono la distanza dal velivolo.
 
 ![08](../08.png)
+
+## Tappa 09: Refactoring del codice e ultime aggiunte.
+
+In quest'ultima tappa ho innanzitutto eseguito un refactoring globale del codice, aggiornando metodi mantenuti solo per assicurare con certezza il funzionamento delle versioni precedenti, spostando alcuni campi pubblici in privati e definendo chiaramente i compiti di ciascuna classe. Ad esempio, ho separato le componenti non 3D di `Scene` (audio, collisioni) in una classe ausiliaria `Scene_aux`. Successivamente ho proposto una semplificazione del metodo `view_projection()` in `update_projection()`, che ora gestisce solo la matrice di proiezione.
+
+Dopo cio' ho aggiunto qualche ultima funzionalita':
+
+- Nuovi effetti sonori, ognuno con buffer dedicato per permettere riproduzioni simultanee.
+  Inoltre sono stati aggiunti dei metodi:
+  - `check_bounds()`, wrapper di `check_collision()` che include anche la manipolazione di due nuovi effetti (allarme di prossimita' al suolo e allarme di stallo)
+  - `attenuation()`, se ci si trova all'interno del velivolo alcuni suoni risulteranno piu' bassi che altri, purtroppo la classe `sf::Sound` di SFML non include filtri complessi (ad esempio per renderli ovattati).
+
+- Inserimento nebbia, non con `glEnable(GL_FOG)` ormai deprecato ma con una modifica al fragment shader della skybox.
+
+- Posizionamento palazzi tramite cluster:
+  ho sostituito la creazione (scala, traslazione) manuale dei palazzi con una funzione che, considerati due vettori tridimensionali casuali, crea gruppi di `n` palazzi con dimensioni e offest (da un punto centrale prestabilito) presi da quest'ultimi.
+
+  ```cpp
+  void building_cluster (const glm::vec3 center, const int n) {
+      for (unsigned int i = 0; i < n; ++i) {
+          building b;
+          b.texture = buildings_t.at(i % buildings_t.size());
+          glm::mat4 size, pos;
+          do {
+              glm::vec3 rs = random_vec3(glm::vec3(2.0, 5.0, 2.0), glm::vec3(3.0, 18.0, 3.0));
+              size = fcg::scaling(rs.x, rs.y, rs.z);
+
+              glm::vec3 rp = random_vec3(glm::vec3(-10.0, 0.0, -10.0), glm::vec3(10.0, 0.0, 10.0));
+              pos = fcg::translation(rp.x + center.x, (rs.y/2.0) + center.y, rp.z + center.z);
+
+              b.model = pos * size;
+          } while (check_overlap(b.model));
+          buildings.push_back(b);
+      }
+  }
+  ```
+
+  Ciascun palazzo prima di esser posizionato supera un controllo dato da `check_overlap()` che, con un ragionamento simile al `check_collision()`, verifica bidimensionalmente che non vi sia un overlap fra il palazzo corrente e il resto di quelli gia' memorizzati. Una possibile ottimizzazione consisterebbe nel verificare questo solo per i palazzi vicini, magari memorizzandoli in settori. Il numero di palazzi e' ora aumentato a 100.
+
+  Ulteriori aggiunte potrebbero essere:
+  - la possibilita' di interagire con il suolo
+  - mesh piu' complesse per il suolo, i palazzi e altre decorazioni
+  - ciclo giorno-notte (basterebbe cambiare cubemap della skybox e ridurre le luci dopo un certo tempo)
+  - rendere tridimensionale l'hud.
+
+![final_preview](../preview.png)

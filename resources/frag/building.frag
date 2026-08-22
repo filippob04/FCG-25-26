@@ -55,7 +55,7 @@ void main()
     // Specular
     vec3 view_dir = normalize (camera_pos - pos);
     vec3 reflect_dir = reflect (-light_dir, normal);
-    float spec = pow (max (dot (view_dir, reflect_dir), 0.0), material.shininess) * 0.05;
+    float spec = pow (max (dot (view_dir, reflect_dir), 0.0), material.shininess);
     vec3 specular = material.specular * spec * light.direct_val;
 
     // final color

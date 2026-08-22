@@ -89,3 +89,8 @@ SET( fn08 "08_game" )
 add_executable( ${fn08} src/08/${fn08}.cpp )
 target_link_libraries( ${fn08} PRIVATE common SFML::System SFML::Window SFML::Graphics SFML::Audio OpenGL::GL glm::glm-header-only ${CORE_GRAPHICS_LIB})
 target_include_directories( ${fn08} PRIVATE ${CMAKE_SOURCE_DIR}/resources/include )
+
+SET( fn09 "09_game" )
+add_executable( ${fn09} src/09/${fn09}.cpp )
+target_link_libraries( ${fn09} PRIVATE common SFML::System SFML::Window SFML::Graphics SFML::Audio OpenGL::GL glm::glm-header-only ${CORE_GRAPHICS_LIB})
+target_include_directories( ${fn09} PRIVATE ${CMAKE_SOURCE_DIR}/resources/include )

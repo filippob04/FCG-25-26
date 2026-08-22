@@ -653,14 +653,14 @@ public:
     void init_buildings (std::string dirname) {
 
         // buildings textures
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/BlueishWindowsBlackSpaces_S.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/DarkGreyWindowsPaleBlocks_S.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/GreyRectangles_S.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/VerticleBrownBricks_S.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/GreyWindowsWithBlinds_S.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/VerticalStrips_S.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/OfficeWindows_S.jpg"));
-        buildings_t.push_back(new Texture2D(dirname + "texture/building/XSupport_S.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/2.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/6.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/9.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/3.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/0.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/5.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/8.jpg"));
+        buildings_t.push_back(new Texture2D(dirname + "texture/building/4.jpg"));
 
         unsigned int i = 0;
         // positioning
@@ -1110,10 +1110,10 @@ private:
         skybox_shaders.use();
 
         glm::mat4 viewnt = glm::mat4(glm::mat3(camera.v)); // removing translation
-        glm::mat4 gWVP = camera.p * viewnt;
+        glm::mat4 vp = camera.p * viewnt;
 
-        GLint wvp_loc = glGetUniformLocation(skybox_shaders.program, "gWVP");
-        glUniformMatrix4fv(wvp_loc, 1, GL_FALSE, &gWVP[0][0]);
+        GLint vp_loc_current = glGetUniformLocation(skybox_shaders.program, "vp");
+        glUniformMatrix4fv(vp_loc_current, 1, GL_FALSE, &vp[0][0]);
 
         GLint model_loc = glGetUniformLocation(skybox_shaders.program, "model");
         glUniformMatrix4fv(model_loc, 1, GL_FALSE, &cube.to_unit_extent[0][0]);
