@@ -47,14 +47,10 @@ PROJECT/
 Per configurare, compilare ed eseguire il progetto si esegua dalla root del progetto:
 
 ```bash
-cmake --build build --target 0x_game && ./build/game
-```
-
-e' possibile inoltre analizzare ogni singola tappa con il relativo step prefisso:
-
-```bash
 cmake --build build --target 0x_game && ./build/0x_game
 ```
+
+dove `0x` corrisponde ad una specifica tappa del progetto. [0-9]
 
 > **Nota**: L'eseguibile di default si aspetta che la cartella resources si trovi nella directory da cui viene lanciato il comando, per poter caricare correttamente gli shader.
 
